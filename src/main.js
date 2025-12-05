@@ -9,7 +9,7 @@ const canvas = document.querySelector("#draw");
 
 // Renderer
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setSize(canvas.clientWidth, canvas.clientHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
@@ -19,9 +19,9 @@ const scene = new THREE.Scene();
 // Camera
 const camera = new THREE.PerspectiveCamera(
   75,
-  window.innerWidth / window.innerHeight,
+  canvas.clientWidth / canvas.clientHeight,
   0.1,
-  1000
+  100
 );
 camera.position.set(0, 0, 0.1);
 
@@ -112,10 +112,10 @@ function getHotspot(hotspotConfig) {
   clickArea.position.copy(hotspotConfig.position);
   clickArea.rotation.copy(hotspotConfig.rotation);
 
-  return { 
-    ring, 
+  return {
+    ring,
     clickArea,
-    transitionImageIndex: hotspotConfig.transitionImageIndex
+    transitionImageIndex: hotspotConfig.transitionImageIndex,
   };
 }
 
@@ -123,8 +123,9 @@ function getHotspot(hotspotConfig) {
 
 // CLICK EVENT
 window.addEventListener("click", (event) => {
-  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
   raycaster.setFromCamera(mouse, camera);
 
   currentHotspots.forEach((h) => {
@@ -145,9 +146,14 @@ function animate() {
 
 // Resize
 window.addEventListener("resize", () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
+  const width = window.innerWidth
+  const height = window.innerHeight * 0.8
+
+  camera.aspect = width / height;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+
+  renderer.setSize(width, height);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 });
 
 // Zoom via FOV
