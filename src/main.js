@@ -6,7 +6,12 @@ import GUI from "lil-gui";
 let currentHotspots = [];
 let enableHotspotMapping = false;
 let previewHotspot = null;
-let currentImageIndex = 0;   // Track currently shown pano
+let currentImageIndex = 0; // Track currently shown pano
+
+// OFFSET
+const OFFSET_X = 0;
+const OFFSET_Y = 8;
+const OFFSET_Z = 10;
 
 const canvas = document.querySelector("#draw");
 
@@ -56,8 +61,8 @@ scene.add(sphere);
 // HOT SPOT LOGIC  ----------*--------------------*----------*------------------------------------------------
 
 function changeImage(imageIndex) {
-  currentImageIndex = imageIndex
-  console.log(currentImageIndex)
+  currentImageIndex = imageIndex;
+  console.log(currentImageIndex);
   clearHotspots();
 
   const current = imagesData[imageIndex];
@@ -125,9 +130,77 @@ function getHotspot(hotspotConfig) {
 }
 
 // ----------*--------------------*----------*------------------------------------------------
+previewHotspot = createPreviewHotspot();
+
+function createPreviewHotspot() {
+  const RING_OUTER_RADIUS = 0.6;
+
+  const ringGeometry = new THREE.RingGeometry(0.5, RING_OUTER_RADIUS, 30);
+  const ringMaterial = new THREE.MeshBasicMaterial({
+    color: 0x0000ff,
+    side: THREE.DoubleSide,
+    opacity: 0.8,
+    transparent: true,
+  });
+
+  const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+  ring.visible = false;
+
+  scene.add(ring);
+
+  return ring;
+}
+
+// ----------*--------------------*----------*------------------------------------------------
+
+window.addEventListener("mousemove", (event) => {
+  if (!enableHotspotMapping) return;
+
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObject(sphere);
+
+  if (intersects.length > 0) {
+    const point = intersects[0].point;
+
+    console.log("x: ", point.x, " y: ", point.y, " z: ", point.z);
+
+    // Position the hotspot much closer to camera (scale down the distance)
+    const direction = point.clone().normalize();
+    const distance = 15; // Place hotspot 10 units from camera instead of 50
+    previewHotspot.position.copy(direction.multiplyScalar(distance));
+
+    // Make the ring face outward from the sphere surface
+    const outwardDirection = previewHotspot.position.clone().normalize();
+    previewHotspot.lookAt(
+      previewHotspot.position.clone().add(outwardDirection)
+    );
+  }
+});
 
 // CLICK EVENT
 window.addEventListener("click", (event) => {
+  if(enableHotspotMapping && previewHotspot.visible) {
+    const position = previewHotspot.position.clone()
+    const rotation = previewHotspot.rotation.clone()
+
+    imagesData[currentImageIndex].hotspots.push({
+      position,
+      rotation,
+      transitionImageIndex: currentImageIndex
+    })
+
+    clearHotspots()
+    addHotspots(currentImageIndex)
+
+    console.log("new hotspot added. position - ", position, " rotation - ", rotation)
+    return;
+  }
+
+  // FOR CLICKING EXISTING HOTSPOTS
   const rect = canvas.getBoundingClientRect();
   mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
   mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
@@ -142,17 +215,22 @@ window.addEventListener("click", (event) => {
   });
 });
 
-// Animation loop
-function animate() {
-  controls.update();
-  renderer.render(scene, camera);
-  requestAnimationFrame(animate);
-}
+window.addEventListener("keyup", (ev) => {
+  const key = ev.key;
+
+  if (key == "h" || key == "H") {
+    enableHotspotMapping = !enableHotspotMapping;
+
+    previewHotspot.visible = enableHotspotMapping;
+
+    console.log("enable hotspot mapping - ", enableHotspotMapping);
+  }
+});
 
 // Resize
 window.addEventListener("resize", () => {
-  const width = window.innerWidth
-  const height = window.innerHeight * 0.8
+  const width = window.innerWidth;
+  const height = window.innerHeight * 0.8;
 
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
@@ -165,16 +243,6 @@ window.addEventListener("resize", () => {
 window.addEventListener("wheel", (ev) => {
   camera.fov += ev.deltaY * 0.05;
   camera.updateProjectionMatrix();
-});
-
-window.addEventListener("keyup", (ev) => {
-  const key = ev.key;
-  if (key >= "1" && key <= "5") {
-    const imageIndex = key - 1;
-    if (imageIndex < imagesData.length) {
-      changeImage(key - 1);
-    }
-  }
 });
 
 // ====================== FADE TRANSITION ======================
@@ -208,34 +276,133 @@ function fadeToTexture(newTexture) {
 // =============================================================
 
 // ====================== THUMBNAILS (20% AREA) ======================
-const thumbsContainer = document.getElementById("thumbs")
+const thumbsContainer = document.getElementById("thumbs");
 
 imagesData.forEach((img, index) => {
-  const thumb = document.createElement("img")
-  thumb.src = img.imageName
-  thumb.className = "thumb"
+  const thumb = document.createElement("img");
+  thumb.src = img.imageName;
+  thumb.className = "thumb";
 
   thumb.addEventListener("click", () => {
-    changeImage(index)
-  })
+    changeImage(index);
+  });
 
-  thumbsContainer.appendChild(thumb)
-})
+  thumbsContainer.appendChild(thumb);
+});
 
-let enableHotstpotMapping = false
-window.addEventListener("keyup", (ev) => {
-  const key = ev.key
-
-  if(key == "h" || key == "H") {
-    console.log("h pressed")
-    
-  }
-})
-
+// Animation loop
+function animate() {
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
 
 function init() {
   changeImage(0);
   animate();
+  addGui();
 }
 
 init();
+
+function addGui() {
+  const gui = new GUI({ title: "Hotspot Position Editor" });
+
+  // Wait for hotspots to load before creating GUI
+  const checkHotspotsInterval = setInterval(() => {
+    if (currentHotspots.length > 0) {
+      clearInterval(checkHotspotsInterval);
+      setupHotspotControls();
+    }
+  }, 100);
+
+  function setupHotspotControls() {
+    const hotspot = currentHotspots[0];
+
+    // Position controls
+    const positionFolder = gui.addFolder("Position");
+    positionFolder
+      .add(hotspot.ring.position, "x", -30, 30, 0.1)
+      .name("X")
+      .onChange((value) => {
+        hotspot.clickArea.position.x = value;
+      });
+
+    positionFolder
+      .add(hotspot.ring.position, "y", -30, 30, 0.1)
+      .name("Y")
+      .onChange((value) => {
+        hotspot.clickArea.position.y = value;
+      });
+
+    positionFolder
+      .add(hotspot.ring.position, "z", -30, 30, 0.1)
+      .name("Z")
+      .onChange((value) => {
+        hotspot.clickArea.position.z = value;
+      });
+
+    positionFolder.open();
+
+    // Rotation controls
+    const rotationFolder = gui.addFolder("Rotation");
+    rotationFolder
+      .add(hotspot.ring.rotation, "x", -Math.PI, Math.PI, 0.01)
+      .name("X")
+      .onChange((value) => {
+        hotspot.clickArea.rotation.x = value;
+      });
+
+    rotationFolder
+      .add(hotspot.ring.rotation, "y", -Math.PI, Math.PI, 0.01)
+      .name("Y")
+      .onChange((value) => {
+        hotspot.clickArea.rotation.y = value;
+      });
+
+    rotationFolder
+      .add(hotspot.ring.rotation, "z", -Math.PI, Math.PI, 0.01)
+      .name("Z")
+      .onChange((value) => {
+        hotspot.clickArea.rotation.z = value;
+      });
+
+    rotationFolder.open();
+
+    // Log current values button
+    gui
+      .add(
+        {
+          logValues: () => {
+            console.log("Position:", {
+              x: hotspot.ring.position.x,
+              y: hotspot.ring.position.y,
+              z: hotspot.ring.position.z,
+            });
+            console.log("Rotation:", {
+              x: hotspot.ring.rotation.x,
+              y: hotspot.ring.rotation.y,
+              z: hotspot.ring.rotation.z,
+            });
+            console.log("Copy this:");
+            console.log(
+              `position: new THREE.Vector3(${hotspot.ring.position.x.toFixed(
+                2
+              )}, ${hotspot.ring.position.y.toFixed(
+                2
+              )}, ${hotspot.ring.position.z.toFixed(2)})`
+            );
+            console.log(
+              `rotation: new THREE.Euler(${hotspot.ring.rotation.x.toFixed(
+                2
+              )}, ${hotspot.ring.rotation.y.toFixed(
+                2
+              )}, ${hotspot.ring.rotation.z.toFixed(2)})`
+            );
+          },
+        },
+        "logValues"
+      )
+      .name("Log Values to Console");
+  }
+}
