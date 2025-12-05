@@ -12,3 +12,31 @@ body {
     height: 80vh;
     display: block;
 }
+
+#thumbs {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100vw;
+  height: 20vh;
+  background: #111;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  overflow-x: auto;
+  padding: 10px;
+}
+
+.thumb {
+  height: 100%;
+  aspect-ratio: 1.6/1;  /* adjust based on your image aspect */
+  cursor: pointer;
+  border: 2px solid white;
+  object-fit: cover;
+  border-radius: 6px;
+  transition: transform 0.2s;
+}
+
+.thumb:hover {
+  transform: scale(1.05);
+}

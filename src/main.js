@@ -4,6 +4,9 @@ import { imagesData } from "./imageData";
 import GUI from "lil-gui";
 
 let currentHotspots = [];
+let enableHotspotMapping = false;
+let previewHotspot = null;
+let currentImageIndex = 0;   // Track currently shown pano
 
 const canvas = document.querySelector("#draw");
 
@@ -53,6 +56,8 @@ scene.add(sphere);
 // HOT SPOT LOGIC  ----------*--------------------*----------*------------------------------------------------
 
 function changeImage(imageIndex) {
+  currentImageIndex = imageIndex
+  console.log(currentImageIndex)
   clearHotspots();
 
   const current = imagesData[imageIndex];
@@ -164,7 +169,6 @@ window.addEventListener("wheel", (ev) => {
 
 window.addEventListener("keyup", (ev) => {
   const key = ev.key;
-  console.log(key);
   if (key >= "1" && key <= "5") {
     const imageIndex = key - 1;
     if (imageIndex < imagesData.length) {
@@ -202,6 +206,32 @@ function fadeToTexture(newTexture) {
   fadeOut();
 }
 // =============================================================
+
+// ====================== THUMBNAILS (20% AREA) ======================
+const thumbsContainer = document.getElementById("thumbs")
+
+imagesData.forEach((img, index) => {
+  const thumb = document.createElement("img")
+  thumb.src = img.imageName
+  thumb.className = "thumb"
+
+  thumb.addEventListener("click", () => {
+    changeImage(index)
+  })
+
+  thumbsContainer.appendChild(thumb)
+})
+
+let enableHotstpotMapping = false
+window.addEventListener("keyup", (ev) => {
+  const key = ev.key
+
+  if(key == "h" || key == "H") {
+    console.log("h pressed")
+    
+  }
+})
+
 
 function init() {
   changeImage(0);
