@@ -65,7 +65,12 @@ function changeImage(imageIndex) {
   textureLoader.load(current.imageName, (texture) => {
     fadeToTexture(texture);
     addHotspots(imageIndex);
-  });
+  },
+  undefined,
+  (err) => {
+    console.log("error loading texture: ", err)
+  }  
+);
 }
 
 function addHotspots(imageIndex) {
@@ -149,53 +154,34 @@ function createPreviewHotspot() {
 // ----------*--------------------*----------*------------------------------------------------
 
 window.addEventListener("mousemove", (event) => {
-  if (!enableHotspotMapping) return;
-
-  const rect = canvas.getBoundingClientRect();
-  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-  raycaster.setFromCamera(mouse, camera);
-  const intersects = raycaster.intersectObject(sphere);
-
-  if (intersects.length > 0) {
-    const point = intersects[0].point;
-
-    console.log("x: ", point.x, " y: ", point.y, " z: ", point.z);
-
-    // Position the hotspot much closer to camera (scale down the distance)
-    const direction = point.clone().normalize();
-    const distance = 15; // Place hotspot 10 units from camera instead of 50
-    previewHotspot.position.copy(direction.multiplyScalar(distance));
-
-    // Make the ring face outward from the sphere surface
-    const outwardDirection = previewHotspot.position.clone().normalize();
-    previewHotspot.lookAt(
-      previewHotspot.position.clone().add(outwardDirection)
-    );
+  if (!enableHotspotMapping) {
+    previewHotspot.visible = false
   }
+
+  calculateMousePos(event)
 });
 
 // CLICK EVENT
 window.addEventListener("click", (event) => {
-  
-  if(enableHotspotMapping && previewHotspot.visible) {
-    const position = previewHotspot.position.clone()
-    const rotation = previewHotspot.rotation.clone()
+  if (enableHotspotMapping && previewHotspot.visible) {
+    const position = previewHotspot.position.clone();
+    const rotation = previewHotspot.rotation.clone();
 
     imagesData[currentImageIndex].hotspots.push({
       position,
       rotation,
-      transitionImageIndex: currentImageIndex
-    })
+      transitionImageIndex: currentImageIndex,
+    });
 
-    clearHotspots()
-    addHotspots(currentImageIndex)
+    clearHotspots();
+    addHotspots(currentImageIndex);
 
-    
-    console.log("new hotspot added. position - ", position, " rotation - ", rotation)
-    previewHotspot.visible = false
-    enableHotspotMapping = false
+    console.log(
+      "new hotspot added. position - ",
+      position,
+      " rotation - ",
+      rotation
+    );
     return;
   }
 
@@ -246,6 +232,9 @@ window.addEventListener("wheel", (ev) => {
 
 // ====================== FADE TRANSITION ======================
 function fadeToTexture(newTexture) {
+  if(sphere.material.map) {
+    sphere.material.map.dispose()
+  }
   // Direct transition - no fade animation
   sphere.material.map = newTexture;
   sphere.material.opacity = 1;
@@ -265,7 +254,73 @@ imagesData.forEach((img, index) => {
     changeImage(index);
   });
 
+  thumb.addEventListener("dragstart", (event) => {
+    event.dataTransfer.setData("imageIndex", index);
+    event.dataTransfer.setData("imageName", img.imageName);
+
+    enableHotspotMapping = true;
+    previewHotspot.visible = true;
+  });
+
+  thumb.addEventListener("dragend", () => {
+    enableHotspotMapping = false;
+    previewHotspot.visible = false;
+  });
+
   thumbsContainer.appendChild(thumb);
+});
+
+function calculateMousePos(mouseEvent) {
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = ((mouseEvent.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((mouseEvent.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObject(sphere);
+
+  if (intersects.length > 0) {
+    const point = intersects[0].point;
+
+    // Position the hotspot much closer to camera (scale down the distance)
+    const direction = point.clone().normalize();
+    const distance = 15; // Place hotspot 10 units from camera instead of 50
+    previewHotspot.position.copy(direction.multiplyScalar(distance));
+
+    // Make the ring face outward from the sphere surface
+    const outwardDirection = previewHotspot.position.clone().normalize();
+    previewHotspot.lookAt(
+      previewHotspot.position.clone().add(outwardDirection)
+    );
+  }
+}
+
+canvas.addEventListener("dragover", (ev) => {
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = "copy";
+});
+
+canvas.addEventListener("drop", (ev) => {
+  ev.preventDefault();
+
+  calculateMousePos(ev)
+
+  const droppedImageName = ev.dataTransfer.getData("imageName");
+  const droppedImageIndex = parseInt(ev.dataTransfer.getData("imageIndex"));
+  const position = previewHotspot.position.clone();
+  const rotation = previewHotspot.rotation.clone();
+
+  // note - we do have curentImageIndex
+  imagesData[currentImageIndex].hotspots.push({
+    position,
+    rotation,
+    transitionImageIndex: droppedImageIndex,
+    transitionImageName: droppedImageName,
+  });
+
+  clearHotspots();
+  addHotspots(currentImageIndex);
+
+  console.log("images Data -> ", imagesData[currentImageIndex]);
 });
 
 // Animation loop
@@ -278,109 +333,6 @@ function animate() {
 function init() {
   changeImage(0);
   animate();
-  addGui();
 }
 
 init();
-
-function addGui() {
-  const gui = new GUI({ title: "Hotspot Position Editor" });
-
-  // Wait for hotspots to load before creating GUI
-  const checkHotspotsInterval = setInterval(() => {
-    if (currentHotspots.length > 0) {
-      clearInterval(checkHotspotsInterval);
-      setupHotspotControls();
-    }
-  }, 100);
-
-  function setupHotspotControls() {
-    const hotspot = currentHotspots[0];
-
-    // Position controls
-    const positionFolder = gui.addFolder("Position");
-    positionFolder
-      .add(hotspot.ring.position, "x", -30, 30, 0.1)
-      .name("X")
-      .onChange((value) => {
-        hotspot.clickArea.position.x = value;
-      });
-
-    positionFolder
-      .add(hotspot.ring.position, "y", -30, 30, 0.1)
-      .name("Y")
-      .onChange((value) => {
-        hotspot.clickArea.position.y = value;
-      });
-
-    positionFolder
-      .add(hotspot.ring.position, "z", -30, 30, 0.1)
-      .name("Z")
-      .onChange((value) => {
-        hotspot.clickArea.position.z = value;
-      });
-
-    positionFolder.open();
-
-    // Rotation controls
-    const rotationFolder = gui.addFolder("Rotation");
-    rotationFolder
-      .add(hotspot.ring.rotation, "x", -Math.PI, Math.PI, 0.01)
-      .name("X")
-      .onChange((value) => {
-        hotspot.clickArea.rotation.x = value;
-      });
-
-    rotationFolder
-      .add(hotspot.ring.rotation, "y", -Math.PI, Math.PI, 0.01)
-      .name("Y")
-      .onChange((value) => {
-        hotspot.clickArea.rotation.y = value;
-      });
-
-    rotationFolder
-      .add(hotspot.ring.rotation, "z", -Math.PI, Math.PI, 0.01)
-      .name("Z")
-      .onChange((value) => {
-        hotspot.clickArea.rotation.z = value;
-      });
-
-    rotationFolder.open();
-
-    // Log current values button
-    gui
-      .add(
-        {
-          logValues: () => {
-            console.log("Position:", {
-              x: hotspot.ring.position.x,
-              y: hotspot.ring.position.y,
-              z: hotspot.ring.position.z,
-            });
-            console.log("Rotation:", {
-              x: hotspot.ring.rotation.x,
-              y: hotspot.ring.rotation.y,
-              z: hotspot.ring.rotation.z,
-            });
-            console.log("Copy this:");
-            console.log(
-              `position: new THREE.Vector3(${hotspot.ring.position.x.toFixed(
-                2
-              )}, ${hotspot.ring.position.y.toFixed(
-                2
-              )}, ${hotspot.ring.position.z.toFixed(2)})`
-            );
-            console.log(
-              `rotation: new THREE.Euler(${hotspot.ring.rotation.x.toFixed(
-                2
-              )}, ${hotspot.ring.rotation.y.toFixed(
-                2
-              )}, ${hotspot.ring.rotation.z.toFixed(2)})`
-            );
-          },
-        },
-        "logValues"
-      )
-      .name("Log Values to Console");
-  }
-}
