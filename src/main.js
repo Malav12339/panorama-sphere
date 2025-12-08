@@ -8,11 +8,6 @@ let enableHotspotMapping = false;
 let previewHotspot = null;
 let currentImageIndex = 0; // Track currently shown pano
 
-// OFFSET
-const OFFSET_X = 0;
-const OFFSET_Y = 8;
-const OFFSET_Z = 10;
-
 const canvas = document.querySelector("#draw");
 
 // Renderer
@@ -183,6 +178,7 @@ window.addEventListener("mousemove", (event) => {
 
 // CLICK EVENT
 window.addEventListener("click", (event) => {
+  
   if(enableHotspotMapping && previewHotspot.visible) {
     const position = previewHotspot.position.clone()
     const rotation = previewHotspot.rotation.clone()
@@ -196,7 +192,10 @@ window.addEventListener("click", (event) => {
     clearHotspots()
     addHotspots(currentImageIndex)
 
+    
     console.log("new hotspot added. position - ", position, " rotation - ", rotation)
+    previewHotspot.visible = false
+    enableHotspotMapping = false
     return;
   }
 
@@ -247,31 +246,10 @@ window.addEventListener("wheel", (ev) => {
 
 // ====================== FADE TRANSITION ======================
 function fadeToTexture(newTexture) {
-  let t = 1;
-
-  function fadeOut() {
-    t -= 0.2;
-    sphere.material.opacity = t;
-
-    if (t > 0) {
-      requestAnimationFrame(fadeOut);
-    } else {
-      sphere.material.map = newTexture;
-      sphere.material.needsUpdate = true;
-      fadeIn();
-    }
-  }
-
-  function fadeIn() {
-    t += 0.05;
-    sphere.material.opacity = t;
-
-    if (t < 1) {
-      requestAnimationFrame(fadeIn);
-    }
-  }
-
-  fadeOut();
+  // Direct transition - no fade animation
+  sphere.material.map = newTexture;
+  sphere.material.opacity = 1;
+  sphere.material.needsUpdate = true;
 }
 // =============================================================
 
