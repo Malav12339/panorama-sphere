@@ -1,0 +1,8 @@
+* MAJOR FEATURES :- 
+-> add default camera focus point in all images
+-> add mouse hover effect on hotspots
+-> add EDIT MODE 
+
+* MINOR FEATURES :-
+-> fix camera fov [ user should be limimted to zoom in or out - to improve ux]
+

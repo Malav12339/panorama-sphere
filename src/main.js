@@ -3,8 +3,11 @@ import { OrbitControls } from "three/examples/jsm/Addons.js";
 import { imagesData } from "./imageData";
 import GUI from "lil-gui";
 
+const ROTATION_STEP = Math.PI / 4;
+
+let defaultPreviewHotspotRotation = null;
+
 let currentHotspots = [];
-let enableHotspotMapping = false;
 let previewHotspot = null;
 let currentImageIndex = 0; // Track currently shown pano
 
@@ -30,6 +33,7 @@ camera.position.set(0, 0, 0.1);
 
 // Controls
 const controls = new OrbitControls(camera, canvas);
+controls.rotateSpeed = -0.3
 controls.enableDamping = true;
 controls.enableZoom = true;
 
@@ -41,7 +45,7 @@ const mouse = new THREE.Vector2();
 const textureLoader = new THREE.TextureLoader();
 
 // Sphere panorama
-const sphereGeometry = new THREE.SphereGeometry(50, 64, 64);
+const sphereGeometry = new THREE.SphereGeometry(50, 32, 32);
 sphereGeometry.scale(-1, 1, 1);
 
 const sphereMaterial = new THREE.MeshBasicMaterial({
@@ -57,20 +61,22 @@ scene.add(sphere);
 
 function changeImage(imageIndex) {
   currentImageIndex = imageIndex;
-  console.log(currentImageIndex);
   clearHotspots();
 
   const current = imagesData[imageIndex];
 
-  textureLoader.load(current.imageName, (texture) => {
-    fadeToTexture(texture);
-    addHotspots(imageIndex);
-  },
-  undefined,
-  (err) => {
-    console.log("error loading texture: ", err)
-  }  
-);
+  const texture = textureLoader.load(
+    current.imageName,
+    (texture) => {
+      fadeToTexture(texture);
+      addHotspots(imageIndex);
+    },
+    undefined,
+    (err) => {
+      console.log("error loading texture: ", err);
+    }
+  );
+  texture.colorSpace = THREE.SRGBColorSpace
 }
 
 function addHotspots(imageIndex) {
@@ -133,6 +139,7 @@ function getHotspot(hotspotConfig) {
 previewHotspot = createPreviewHotspot();
 
 function createPreviewHotspot() {
+  const group = new THREE.Group()
   const RING_OUTER_RADIUS = 0.6;
 
   const ringGeometry = new THREE.RingGeometry(0.5, RING_OUTER_RADIUS, 30);
@@ -144,67 +151,83 @@ function createPreviewHotspot() {
   });
 
   const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-  ring.visible = false;
+  group.add(ring)
 
-  scene.add(ring);
+  // invisible click Area
+  const clickGeometry = new THREE.CircleGeometry(RING_OUTER_RADIUS, 30)
+  const clickMaterial = new THREE.MeshBasicMaterial({
+    visible: false,
+    side: THREE.DoubleSide
+  })
+  const clickArea = new THREE.Mesh(clickGeometry, clickMaterial)
+  group.add(clickArea)
 
-  return ring;
+  group.visible = false
+  scene.add(group)
+
+  return group;
 }
 
 // ----------*--------------------*----------*------------------------------------------------
-
-window.addEventListener("mousemove", (event) => {
-  if (!enableHotspotMapping) {
-    previewHotspot.visible = false
+function handleRotation(key) {
+  if (key === "x" || key === "X") {
+    previewHotspot.rotation.x += ROTATION_STEP;
   }
-
-  calculateMousePos(event)
-});
+  if (key === "y" || key === "Y") {
+    previewHotspot.rotation.y += ROTATION_STEP;
+  }
+  if (key === "z" || key === "Z") {
+    previewHotspot.rotation.z += ROTATION_STEP;
+  }
+}
 
 // CLICK EVENT
-window.addEventListener("click", (event) => {
-  if (enableHotspotMapping && previewHotspot.visible) {
+
+function handleSwipe(key) {
+  const cameraX = camera.position.x
+  const cameraY = camera.position.y
+  const cameraZ = camera.position.z
+
+  console.log("camera x ", cameraX)
+  if(key === "ArrowLeft") {
+    camera.position.lerp(new THREE.Vector3(cameraX + 10, cameraY, cameraZ), 0.1)
+  }
+}
+
+window.addEventListener("keyup", (event) => {
+  const key = event.key;
+
+  handleSwipe(key)
+  handleRotation(key);
+  setToDefault(key);
+
+  if (key == "Enter" && previewHotspot.visible) {
     const position = previewHotspot.position.clone();
     const rotation = previewHotspot.rotation.clone();
 
     imagesData[currentImageIndex].hotspots.push({
       position,
       rotation,
-      transitionImageIndex: currentImageIndex,
+      transitionImageIndex: previewHotspot.imageIndex,
+      transitionImageName: previewHotspot.imageName,
     });
 
     clearHotspots();
     addHotspots(currentImageIndex);
 
+      console.log("AFTER ENTER \n", currentHotspots)
+    previewHotspot.visible = false;
+
     return;
   }
-
-  // FOR CLICKING EXISTING HOTSPOTS
-  const rect = canvas.getBoundingClientRect();
-  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-  raycaster.setFromCamera(mouse, camera);
-
-  currentHotspots.forEach((h) => {
-    const intersects = raycaster.intersectObject(h.clickArea);
-
-    if (intersects.length > 0) {
-      changeImage(h.transitionImageIndex);
-    }
-  });
 });
 
-window.addEventListener("keyup", (ev) => {
-  const key = ev.key;
-
-  if (key == "h" || key == "H") {
-    enableHotspotMapping = !enableHotspotMapping;
-
-    previewHotspot.visible = enableHotspotMapping;
-
-    console.log("enable hotspot mapping - ", enableHotspotMapping);
+function setToDefault(key) {
+  if (key === "d" || key === "D") {
+    previewHotspot.rotation.copy(defaultPreviewHotspotRotation);
   }
-});
+}
+
 
 // Resize
 window.addEventListener("resize", () => {
@@ -224,10 +247,27 @@ window.addEventListener("wheel", (ev) => {
   camera.updateProjectionMatrix();
 });
 
+window.addEventListener("click", (event) => {
+  
+  // FOR CLICKING EXISTING HOTSPOTS
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+
+  console.log(currentHotspots)
+  currentHotspots.forEach((h) => {
+    const intersects = raycaster.intersectObject(h.clickArea);
+
+    if (intersects.length > 0) {
+      changeImage(h.transitionImageIndex);
+    }
+  });
+});
 // ====================== FADE TRANSITION ======================
 function fadeToTexture(newTexture) {
-  if(sphere.material.map) {
-    sphere.material.map.dispose()
+  if (sphere.material.map) {
+    sphere.material.map.dispose();
   }
   // Direct transition - no fade animation
   sphere.material.map = newTexture;
@@ -252,12 +292,6 @@ imagesData.forEach((img, index) => {
     event.dataTransfer.setData("imageIndex", index);
     event.dataTransfer.setData("imageName", img.imageName);
 
-    enableHotspotMapping = true;
-    previewHotspot.visible = true;
-  });
-
-  thumb.addEventListener("dragend", () => {
-    enableHotspotMapping = false;
     previewHotspot.visible = false;
   });
 
@@ -282,9 +316,9 @@ function calculateMousePos(mouseEvent) {
 
     // Make the ring face outward from the sphere surface
     const outwardDirection = previewHotspot.position.clone().normalize();
-    previewHotspot.lookAt(
-      previewHotspot.position.clone().add(outwardDirection)
-    );
+    // previewHotspot.lookAt(
+    //   previewHotspot.position.clone().add(outwardDirection)
+    // );
   }
 }
 
@@ -296,25 +330,14 @@ canvas.addEventListener("dragover", (ev) => {
 canvas.addEventListener("drop", (ev) => {
   ev.preventDefault();
 
-  calculateMousePos(ev)
+  calculateMousePos(ev);
 
-  const droppedImageName = ev.dataTransfer.getData("imageName");
-  const droppedImageIndex = parseInt(ev.dataTransfer.getData("imageIndex"));
-  const position = previewHotspot.position.clone();
-  const rotation = previewHotspot.rotation.clone();
+  defaultPreviewHotspotRotation = previewHotspot.rotation.clone();
 
-  // note - we do have curentImageIndex
-  imagesData[currentImageIndex].hotspots.push({
-    position,
-    rotation,
-    transitionImageIndex: droppedImageIndex,
-    transitionImageName: droppedImageName,
-  });
+  previewHotspot.imageName = ev.dataTransfer.getData("imageName");
+  previewHotspot.imageIndex = parseInt(ev.dataTransfer.getData("imageIndex"));
 
-  clearHotspots();
-  addHotspots(currentImageIndex);
-
-  console.log("images Data -> ", imagesData[currentImageIndex]);
+  previewHotspot.visible = true;
 });
 
 // Animation loop
