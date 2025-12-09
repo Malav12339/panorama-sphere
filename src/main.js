@@ -176,12 +176,6 @@ window.addEventListener("click", (event) => {
     clearHotspots();
     addHotspots(currentImageIndex);
 
-    console.log(
-      "new hotspot added. position - ",
-      position,
-      " rotation - ",
-      rotation
-    );
     return;
   }
 
@@ -296,7 +290,7 @@ function calculateMousePos(mouseEvent) {
 
 canvas.addEventListener("dragover", (ev) => {
   ev.preventDefault();
-  ev.dataTransfer.dropEffect = "copy";
+  // ev.dataTransfer.dropEffect = "copy";
 });
 
 canvas.addEventListener("drop", (ev) => {
