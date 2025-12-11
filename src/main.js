@@ -11,7 +11,12 @@ let currentHotspots = [];
 let previewHotspot = null;
 let currentImageIndex = 0; // Track currently shown pano
 
+let editableMode = false;
+let selectedHotspot = null;
+let isSelectedPreviewHotspot = false;
+
 const canvas = document.querySelector("#draw");
+canvas.textContent = "Hello"
 
 // Renderer
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -33,9 +38,9 @@ camera.position.set(0, 0, 0.1);
 
 // Controls
 const controls = new OrbitControls(camera, canvas);
-controls.rotateSpeed = -0.3
+controls.rotateSpeed = -0.3;
 controls.enableDamping = true;
-controls.enableZoom = true;
+controls.enableZoom = false;
 
 // Raycaster for hotspot clicks
 const raycaster = new THREE.Raycaster();
@@ -63,11 +68,13 @@ function changeImage(imageIndex) {
   currentImageIndex = imageIndex;
   clearHotspots();
 
+  previewHotspot.visible = false;
   const current = imagesData[imageIndex];
 
   const texture = textureLoader.load(
     current.imageName,
     (texture) => {
+      texture.colorSpace = THREE.SRGBColorSpace;
       fadeToTexture(texture);
       addHotspots(imageIndex);
     },
@@ -76,32 +83,34 @@ function changeImage(imageIndex) {
       console.log("error loading texture: ", err);
     }
   );
-  texture.colorSpace = THREE.SRGBColorSpace
 }
 
 function addHotspots(imageIndex) {
   const imageData = imagesData[imageIndex];
 
   imageData.hotspots.forEach((h) => {
+    const group = new THREE.Group();
+
+    group.position.copy(h.position);
+    group.rotation.copy(h.rotation);
+
     const hotspot = getHotspot(h);
-    scene.add(hotspot.ring);
-    scene.add(hotspot.clickArea);
 
-    currentHotspots.push(hotspot);
+    group.add(hotspot.ring);
+    group.add(hotspot.clickArea);
+    scene.add(group);
+
+    // ref for raycasting
+    hotspot.clickArea.userData.group = group;
+
+    currentHotspots.push({
+      group,
+      ring: hotspot.ring,
+      clickArea: hotspot.clickArea,
+      transitionImageIndex: hotspot.transitionImageIndex,
+      transitionImageName: h.transitionImageName,
+    });
   });
-}
-
-function clearHotspots() {
-  currentHotspots.forEach((h) => {
-    scene.remove(h.ring);
-    scene.remove(h.clickArea);
-
-    h.ring.geometry.dispose();
-    h.ring.material.dispose();
-    h.clickArea.geometry.dispose();
-    h.clickArea.material.dispose();
-  });
-  currentHotspots = [];
 }
 
 function getHotspot(hotspotConfig) {
@@ -114,8 +123,8 @@ function getHotspot(hotspotConfig) {
     side: THREE.DoubleSide,
   });
   const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-  ring.position.copy(hotspotConfig.position);
-  ring.rotation.copy(hotspotConfig.rotation);
+  // ring.position.copy(hotspotConfig.position);
+  // ring.rotation.copy(hotspotConfig.rotation);
 
   // invisible clickable area
   const clickGeometry = new THREE.CircleGeometry(RING_OUTER_RADIUS, 30);
@@ -125,8 +134,8 @@ function getHotspot(hotspotConfig) {
   });
 
   const clickArea = new THREE.Mesh(clickGeometry, clickMaterial);
-  clickArea.position.copy(hotspotConfig.position);
-  clickArea.rotation.copy(hotspotConfig.rotation);
+  // clickArea.position.copy(hotspotConfig.position);
+  // clickArea.rotation.copy(hotspotConfig.rotation);
 
   return {
     ring,
@@ -135,11 +144,23 @@ function getHotspot(hotspotConfig) {
   };
 }
 
+function clearHotspots() {
+  currentHotspots.forEach((h) => {
+    scene.remove(h.group);
+
+    h.ring.geometry.dispose();
+    h.ring.material.dispose();
+    h.clickArea.geometry.dispose();
+    h.clickArea.material.dispose();
+  });
+  currentHotspots = [];
+}
+
 // ----------*--------------------*----------*------------------------------------------------
 previewHotspot = createPreviewHotspot();
 
 function createPreviewHotspot() {
-  const group = new THREE.Group()
+  const group = new THREE.Group();
   const RING_OUTER_RADIUS = 0.6;
 
   const ringGeometry = new THREE.RingGeometry(0.5, RING_OUTER_RADIUS, 30);
@@ -151,19 +172,21 @@ function createPreviewHotspot() {
   });
 
   const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-  group.add(ring)
+  group.add(ring);
 
   // invisible click Area
-  const clickGeometry = new THREE.CircleGeometry(RING_OUTER_RADIUS, 30)
+  const clickGeometry = new THREE.CircleGeometry(RING_OUTER_RADIUS, 30);
   const clickMaterial = new THREE.MeshBasicMaterial({
     visible: false,
-    side: THREE.DoubleSide
-  })
-  const clickArea = new THREE.Mesh(clickGeometry, clickMaterial)
-  group.add(clickArea)
+    side: THREE.DoubleSide,
+  });
+  const clickArea = new THREE.Mesh(clickGeometry, clickMaterial);
+  group.add(clickArea);
 
-  group.visible = false
-  scene.add(group)
+  group.visible = false;
+  scene.add(group);
+
+  group.userData.mesh = clickArea;
 
   return group;
 }
@@ -172,36 +195,35 @@ function createPreviewHotspot() {
 function handleRotation(key) {
   if (key === "x" || key === "X") {
     previewHotspot.rotation.x += ROTATION_STEP;
+    selectedHotspot.rotation.x += ROTATION_STEP
   }
   if (key === "y" || key === "Y") {
     previewHotspot.rotation.y += ROTATION_STEP;
+    selectedHotspot.rotation.y += ROTATION_STEP
   }
   if (key === "z" || key === "Z") {
     previewHotspot.rotation.z += ROTATION_STEP;
+    selectedHotspot.rotation.z += ROTATION_STEP
   }
 }
 
 // CLICK EVENT
-
-function handleSwipe(key) {
-  const cameraX = camera.position.x
-  const cameraY = camera.position.y
-  const cameraZ = camera.position.z
-
-  console.log("camera x ", cameraX)
-  if(key === "ArrowLeft") {
-    camera.position.lerp(new THREE.Vector3(cameraX + 10, cameraY, cameraZ), 0.1)
-  }
-}
-
 window.addEventListener("keyup", (event) => {
   const key = event.key;
 
-  handleSwipe(key)
   handleRotation(key);
   setToDefault(key);
 
-  if (key == "Enter" && previewHotspot.visible) {
+  if (key === "h") {
+    previewHotspot.visible = !previewHotspot.visible;
+  }
+
+  if (key === "e" || key === "E") {
+    editableMode = !editableMode;
+    console.log("edit: ", editableMode);
+  }
+
+  if (key === "Enter" && previewHotspot.visible) {
     const position = previewHotspot.position.clone();
     const rotation = previewHotspot.rotation.clone();
 
@@ -215,7 +237,6 @@ window.addEventListener("keyup", (event) => {
     clearHotspots();
     addHotspots(currentImageIndex);
 
-      console.log("AFTER ENTER \n", currentHotspots)
     previewHotspot.visible = false;
 
     return;
@@ -227,7 +248,6 @@ function setToDefault(key) {
     previewHotspot.rotation.copy(defaultPreviewHotspotRotation);
   }
 }
-
 
 // Resize
 window.addEventListener("resize", () => {
@@ -242,20 +262,24 @@ window.addEventListener("resize", () => {
 });
 
 // Zoom via FOV
-window.addEventListener("wheel", (ev) => {
-  camera.fov += ev.deltaY * 0.05;
+canvas.addEventListener("wheel", (ev) => {
+  // camera.fov += ev.deltaY * 0.05;
+  camera.fov = THREE.MathUtils.clamp(camera.fov + ev.deltaY * 0.05, 35, 75);
+
   camera.updateProjectionMatrix();
 });
 
-window.addEventListener("click", (event) => {
-  
+canvas.addEventListener("click", (event) => {
+  if (editableMode) {
+    console.log("edit mode");
+    return;
+  }
   // FOR CLICKING EXISTING HOTSPOTS
   const rect = canvas.getBoundingClientRect();
   mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
   mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
   raycaster.setFromCamera(mouse, camera);
 
-  console.log(currentHotspots)
   currentHotspots.forEach((h) => {
     const intersects = raycaster.intersectObject(h.clickArea);
 
@@ -264,6 +288,89 @@ window.addEventListener("click", (event) => {
     }
   });
 });
+
+canvas.addEventListener("mousedown", (mouseEvent) => {
+  if (!editableMode) {
+    console.log("Please enter edit mode to edit");
+    return;
+  }
+
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = ((mouseEvent.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((mouseEvent.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+
+  const clickMeshes = currentHotspots.map((h) => h.clickArea);
+  const intersects = raycaster.intersectObjects(clickMeshes);
+  const previewIntersects = raycaster.intersectObject(
+    previewHotspot.userData.mesh
+  );
+
+  let hitObjectGroup;
+  if (previewIntersects.length > 0) {
+    console.log("p intersects: ", previewIntersects);
+    isSelectedPreviewHotspot = true;
+    selectedHotspot = previewHotspot;
+    controls.enabled = false;
+    return;
+  }
+
+  if (intersects.length > 0) {
+    hitObjectGroup = intersects[0].object.userData.group;
+    selectedHotspot = hitObjectGroup;
+    controls.enabled = false;
+  } else {
+    selectedHotspot = null
+    controls.enabled = true
+  }
+});
+
+canvas.addEventListener("mousemove", (mouseEvent) => {
+  if (!selectedHotspot || !editableMode) {
+    return;
+  }
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = ((mouseEvent.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((mouseEvent.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObject(sphere);
+
+  if (intersects.length > 0) {
+    const point = intersects[0].point;
+
+    // Position the hotspot much closer to camera (scale down the distance)
+    const direction = point.clone().normalize();
+    const distance = 11; // Place hotspot 10 units from camera instead of 50
+    selectedHotspot.position.copy(direction.multiplyScalar(distance));
+  }
+});
+
+canvas.addEventListener("mouseup", (mouseEvent) => {
+  isSelectedPreviewHotspot = false;
+  if (!editableMode || !selectedHotspot) {
+    return;
+  }
+  updateRootHotspotsData();
+  controls.enabled = true;
+  selectedHotspot = null;
+});
+
+function updateRootHotspotsData() {
+  // update imagesData according to currentHotspots
+  if (!isSelectedPreviewHotspot) {
+    const updatedHotspots = currentHotspots.map((ch) => ({
+      position: ch.group.position,
+      rotation: ch.group.rotation,
+      transitionImageName: ch.transitionImageName,
+      transitionImageIndex: ch.transitionImageIndex,
+    }));
+
+    imagesData[currentImageIndex].hotspots = updatedHotspots;
+  }
+}
+
 // ====================== FADE TRANSITION ======================
 function fadeToTexture(newTexture) {
   if (sphere.material.map) {
@@ -311,7 +418,7 @@ function calculateMousePos(mouseEvent) {
 
     // Position the hotspot much closer to camera (scale down the distance)
     const direction = point.clone().normalize();
-    const distance = 15; // Place hotspot 10 units from camera instead of 50
+    const distance = 11; // Place hotspot 10 units from camera instead of 50
     previewHotspot.position.copy(direction.multiplyScalar(distance));
 
     // Make the ring face outward from the sphere surface
@@ -330,6 +437,10 @@ canvas.addEventListener("dragover", (ev) => {
 canvas.addEventListener("drop", (ev) => {
   ev.preventDefault();
 
+  controls.enabled = true;
+  isSelectedPreviewHotspot = false;
+  selectedHotspot = null;
+
   calculateMousePos(ev);
 
   defaultPreviewHotspotRotation = previewHotspot.rotation.clone();
@@ -338,6 +449,7 @@ canvas.addEventListener("drop", (ev) => {
   previewHotspot.imageIndex = parseInt(ev.dataTransfer.getData("imageIndex"));
 
   previewHotspot.visible = true;
+  console.log("prev hotspot pos - ", previewHotspot.position);
 });
 
 // Animation loop
