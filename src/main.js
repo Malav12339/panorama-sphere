@@ -11,7 +11,7 @@ let currentHotspots = [];
 let previewHotspot = null;
 let currentImageIndex = 0; // Track currently shown pano
 
-let editableMode = false;
+let mode = "view"; // view or edit
 let selectedHotspot = null;
 let isSelectedPreviewHotspot = false;
 
@@ -70,7 +70,7 @@ function changeImage(imageIndex) {
   previewHotspot.visible = false;
   const current = imagesData[imageIndex];
 
-  const texture = textureLoader.load(
+  textureLoader.load(
     current.imageName,
     (texture) => {
       texture.colorSpace = THREE.SRGBColorSpace;
@@ -218,8 +218,9 @@ window.addEventListener("keyup", (event) => {
   }
 
   if (key === "e" || key === "E") {
-    editableMode = !editableMode;
-    console.log("edit: ", editableMode);
+    if(mode === "view") mode = "edit"
+    else mode = "view"
+    console.log("mode: ", mode);
   }
 
   if (key === "Enter" && previewHotspot.visible) {
@@ -269,7 +270,7 @@ canvas.addEventListener("wheel", (ev) => {
 });
 
 canvas.addEventListener("click", (event) => {
-  if (editableMode) {
+  if (mode === "edit") {
     console.log("edit mode \n");
     console.log("selected hostpt: ", selectedHotspot);
     return;
@@ -291,7 +292,7 @@ canvas.addEventListener("click", (event) => {
 });
 
 canvas.addEventListener("mousedown", (mouseEvent) => {
-  if (!editableMode) {
+  if (mode === "view") {
     console.log("Please enter edit mode to edit");
     return;
   }
@@ -331,7 +332,7 @@ canvas.addEventListener("mousedown", (mouseEvent) => {
 });
 
 canvas.addEventListener("mousemove", (mouseEvent) => {
-  if (!selectedHotspot || !editableMode) {
+  if (!selectedHotspot || mode === "view") {
     return;
   }
   const rect = canvas.getBoundingClientRect();
@@ -353,7 +354,7 @@ canvas.addEventListener("mousemove", (mouseEvent) => {
 
 canvas.addEventListener("mouseup", (mouseEvent) => {
   
-  if (!editableMode || !selectedHotspot) {
+  if (mode === "view" || !selectedHotspot) {
     return;
   }
   updateRootHotspotsData();
