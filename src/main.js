@@ -16,7 +16,6 @@ let selectedHotspot = null;
 let isSelectedPreviewHotspot = false;
 
 const canvas = document.querySelector("#draw");
-canvas.textContent = "Hello"
 
 // Renderer
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -195,15 +194,15 @@ function createPreviewHotspot() {
 function handleRotation(key) {
   if (key === "x" || key === "X") {
     previewHotspot.rotation.x += ROTATION_STEP;
-    selectedHotspot.rotation.x += ROTATION_STEP
+    if (selectedHotspot) selectedHotspot.rotation.x += ROTATION_STEP;
   }
   if (key === "y" || key === "Y") {
     previewHotspot.rotation.y += ROTATION_STEP;
-    selectedHotspot.rotation.y += ROTATION_STEP
+    if (selectedHotspot) selectedHotspot.rotation.y += ROTATION_STEP;
   }
   if (key === "z" || key === "Z") {
     previewHotspot.rotation.z += ROTATION_STEP;
-    selectedHotspot.rotation.z += ROTATION_STEP
+    if (selectedHotspot) selectedHotspot.rotation.z += ROTATION_STEP;
   }
 }
 
@@ -271,9 +270,11 @@ canvas.addEventListener("wheel", (ev) => {
 
 canvas.addEventListener("click", (event) => {
   if (editableMode) {
-    console.log("edit mode");
+    console.log("edit mode \n");
+    console.log("selected hostpt: ", selectedHotspot);
     return;
   }
+
   // FOR CLICKING EXISTING HOTSPOTS
   const rect = canvas.getBoundingClientRect();
   mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -301,8 +302,6 @@ canvas.addEventListener("mousedown", (mouseEvent) => {
 
   raycaster.setFromCamera(mouse, camera);
 
-  const clickMeshes = currentHotspots.map((h) => h.clickArea);
-  const intersects = raycaster.intersectObjects(clickMeshes);
   const previewIntersects = raycaster.intersectObject(
     previewHotspot.userData.mesh
   );
@@ -313,17 +312,22 @@ canvas.addEventListener("mousedown", (mouseEvent) => {
     isSelectedPreviewHotspot = true;
     selectedHotspot = previewHotspot;
     controls.enabled = false;
+    console.log("selected hostpt: ", selectedHotspot);
+
     return;
   }
 
+  const clickMeshes = currentHotspots.map((h) => h.clickArea);
+  const intersects = raycaster.intersectObjects(clickMeshes);
   if (intersects.length > 0) {
     hitObjectGroup = intersects[0].object.userData.group;
     selectedHotspot = hitObjectGroup;
     controls.enabled = false;
   } else {
-    selectedHotspot = null
-    controls.enabled = true
+    selectedHotspot = null;
+    controls.enabled = true;
   }
+  console.log("selected hostpt: ", selectedHotspot);
 });
 
 canvas.addEventListener("mousemove", (mouseEvent) => {
@@ -348,17 +352,19 @@ canvas.addEventListener("mousemove", (mouseEvent) => {
 });
 
 canvas.addEventListener("mouseup", (mouseEvent) => {
-  isSelectedPreviewHotspot = false;
+  
   if (!editableMode || !selectedHotspot) {
     return;
   }
   updateRootHotspotsData();
+  isSelectedPreviewHotspot = false;
   controls.enabled = true;
   selectedHotspot = null;
 });
 
 function updateRootHotspotsData() {
   // update imagesData according to currentHotspots
+  console.log("is selected preview hotspot: ", isSelectedPreviewHotspot);
   if (!isSelectedPreviewHotspot) {
     const updatedHotspots = currentHotspots.map((ch) => ({
       position: ch.group.position,
