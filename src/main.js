@@ -15,6 +15,8 @@ let mode = "view"; // view or edit
 let selectedHotspot = null;
 let isSelectedPreviewHotspot = false;
 
+let isDragging = false;
+
 const canvas = document.querySelector("#draw");
 
 // Renderer
@@ -193,15 +195,18 @@ function createPreviewHotspot() {
 // ----------*--------------------*----------*------------------------------------------------
 function handleRotation(key) {
   if (key === "x" || key === "X") {
-    previewHotspot.rotation.x += ROTATION_STEP;
-    if (selectedHotspot) selectedHotspot.rotation.x += ROTATION_STEP;
+    const target = isSelectedPreviewHotspot ? previewHotspot : selectedHotspot;
+
+    if (target) {
+      target.rotation.x += ROTATION_STEP;
+    }
   }
   if (key === "y" || key === "Y") {
-    previewHotspot.rotation.y += ROTATION_STEP;
+    if (isSelectedPreviewHotspot) previewHotspot.rotation.y += ROTATION_STEP;
     if (selectedHotspot) selectedHotspot.rotation.y += ROTATION_STEP;
   }
   if (key === "z" || key === "Z") {
-    previewHotspot.rotation.z += ROTATION_STEP;
+    if (isSelectedPreviewHotspot) previewHotspot.rotation.z += ROTATION_STEP;
     if (selectedHotspot) selectedHotspot.rotation.z += ROTATION_STEP;
   }
 }
@@ -218,28 +223,31 @@ window.addEventListener("keyup", (event) => {
   }
 
   if (key === "e" || key === "E") {
-    if(mode === "view") mode = "edit"
-    else mode = "view"
+    if (mode === "view") mode = "edit";
+    else mode = "view";
     console.log("mode: ", mode);
   }
 
   if (key === "Enter" && previewHotspot.visible) {
-    const position = previewHotspot.position.clone();
-    const rotation = previewHotspot.rotation.clone();
+    if (previewHotspot) {
+      const position = previewHotspot.position.clone();
+      const rotation = previewHotspot.rotation.clone();
 
-    imagesData[currentImageIndex].hotspots.push({
-      position,
-      rotation,
-      transitionImageIndex: previewHotspot.imageIndex,
-      transitionImageName: previewHotspot.imageName,
-    });
+      imagesData[currentImageIndex].hotspots.push({
+        position,
+        rotation,
+        transitionImageIndex: previewHotspot.imageIndex,
+        transitionImageName: previewHotspot.imageName,
+      });
 
-    clearHotspots();
-    addHotspots(currentImageIndex);
+      clearHotspots();
+      addHotspots(currentImageIndex);
 
-    previewHotspot.visible = false;
+      previewHotspot.visible = false;
 
-    return;
+      return;
+    }
+    updateRootHotspotsData()
   }
 });
 
@@ -270,25 +278,48 @@ canvas.addEventListener("wheel", (ev) => {
 });
 
 canvas.addEventListener("click", (event) => {
-  if (mode === "edit") {
-    console.log("edit mode \n");
-    console.log("selected hostpt: ", selectedHotspot);
-    return;
-  }
-
-  // FOR CLICKING EXISTING HOTSPOTS
   const rect = canvas.getBoundingClientRect();
   mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
   mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
   raycaster.setFromCamera(mouse, camera);
 
-  currentHotspots.forEach((h) => {
+  // 1️⃣ CHECK REAL HOTSPOTS FIRST
+  let clickedAHotspot = false;
+
+  for (let i = 0; i < currentHotspots.length; i++) {
+    const h = currentHotspots[i];
     const intersects = raycaster.intersectObject(h.clickArea);
 
     if (intersects.length > 0) {
-      changeImage(h.transitionImageIndex);
+      clickedAHotspot = true;
+
+      if (mode === "edit") {
+        selectedHotspot = h.group;
+      } else {
+        changeImage(h.transitionImageIndex);
+      }
+
+      break; // 🔥 IMPORTANT
     }
-  });
+  }
+
+  // If a real hotspot was clicked, stop NOW
+  if (clickedAHotspot) return;
+
+  // 2️⃣ OTHERWISE CHECK PREVIEW HOTSPOT
+  const previewIntersects = raycaster.intersectObject(
+    previewHotspot.userData.mesh
+  );
+
+  if (previewIntersects.length > 0) {
+    console.log("preview intersects:", previewIntersects);
+    isSelectedPreviewHotspot = true;
+    selectedHotspot = previewHotspot;
+    return;
+  }
+
+  // 3️⃣ NOTHING HIT
+  selectedHotspot = null;
 });
 
 canvas.addEventListener("mousedown", (mouseEvent) => {
@@ -309,11 +340,10 @@ canvas.addEventListener("mousedown", (mouseEvent) => {
 
   let hitObjectGroup;
   if (previewIntersects.length > 0) {
-    console.log("p intersects: ", previewIntersects);
     isSelectedPreviewHotspot = true;
     selectedHotspot = previewHotspot;
     controls.enabled = false;
-    console.log("selected hostpt: ", selectedHotspot);
+    isDragging = true;
 
     return;
   }
@@ -323,16 +353,16 @@ canvas.addEventListener("mousedown", (mouseEvent) => {
   if (intersects.length > 0) {
     hitObjectGroup = intersects[0].object.userData.group;
     selectedHotspot = hitObjectGroup;
+    isDragging = true;
     controls.enabled = false;
   } else {
     selectedHotspot = null;
     controls.enabled = true;
   }
-  console.log("selected hostpt: ", selectedHotspot);
 });
 
 canvas.addEventListener("mousemove", (mouseEvent) => {
-  if (!selectedHotspot || mode === "view") {
+  if (!selectedHotspot || mode === "view" || !isDragging) {
     return;
   }
   const rect = canvas.getBoundingClientRect();
@@ -353,23 +383,23 @@ canvas.addEventListener("mousemove", (mouseEvent) => {
 });
 
 canvas.addEventListener("mouseup", (mouseEvent) => {
-  
   if (mode === "view" || !selectedHotspot) {
     return;
   }
+
   updateRootHotspotsData();
   isSelectedPreviewHotspot = false;
   controls.enabled = true;
-  selectedHotspot = null;
+  // selectedHotspot = null;
+  isDragging = false;
 });
 
 function updateRootHotspotsData() {
   // update imagesData according to currentHotspots
-  console.log("is selected preview hotspot: ", isSelectedPreviewHotspot);
-  if (!isSelectedPreviewHotspot) {
+  if (true) {
     const updatedHotspots = currentHotspots.map((ch) => ({
-      position: ch.group.position,
-      rotation: ch.group.rotation,
+      position: ch.group.position.clone(),
+      rotation: ch.group.rotation.clone(),
       transitionImageName: ch.transitionImageName,
       transitionImageIndex: ch.transitionImageIndex,
     }));
@@ -403,6 +433,11 @@ imagesData.forEach((img, index) => {
   });
 
   thumb.addEventListener("dragstart", (event) => {
+    if (mode === "view") {
+      event.preventDefault();
+      return;
+    }
+
     event.dataTransfer.setData("imageIndex", index);
     event.dataTransfer.setData("imageName", img.imageName);
 
@@ -437,16 +472,17 @@ function calculateMousePos(mouseEvent) {
 }
 
 canvas.addEventListener("dragover", (ev) => {
+  if (mode === "view") return; // block drag indicator
   ev.preventDefault();
-  // ev.dataTransfer.dropEffect = "copy";
 });
 
 canvas.addEventListener("drop", (ev) => {
+  if (mode === "view") return;
   ev.preventDefault();
 
   controls.enabled = true;
-  isSelectedPreviewHotspot = false;
-  selectedHotspot = null;
+  isSelectedPreviewHotspot = true;
+  selectedHotspot = previewHotspot;
 
   calculateMousePos(ev);
 
@@ -456,12 +492,27 @@ canvas.addEventListener("drop", (ev) => {
   previewHotspot.imageIndex = parseInt(ev.dataTransfer.getData("imageIndex"));
 
   previewHotspot.visible = true;
-  console.log("prev hotspot pos - ", previewHotspot.position);
 });
 
 // Animation loop
 function animate() {
   controls.update();
+
+  currentHotspots.forEach((h) => {
+    h.ring.material.color.set(
+      selectedHotspot === h.group ? 0xfc03be : 0xff0000
+    );
+    h.ring.material.needsUpdate = true;
+  });
+
+  if (previewHotspot.visible) {
+    const previewRing = previewHotspot.children[0];
+    previewRing.material.color.set(
+      selectedHotspot === previewHotspot ? 0xfc03be : 0x0000ff
+    );
+    previewRing.material.needsUpdate = true;
+  }
+
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
 }

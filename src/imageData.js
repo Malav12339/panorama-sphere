@@ -3,7 +3,7 @@ import * as THREE from "three";
 let imagesData = [
   {
     imageName: "pano_1.jpg",
-    cameraRotaion: null,
+    cameraRotation: null,
     hotspots: [
       {
         position: new THREE.Vector3(-5, -3.8, -10),
@@ -15,7 +15,7 @@ let imagesData = [
   },
   {
     imageName: "pano_2.jpg",
-    cameraRotaion: null,
+    cameraRotation: null,
     hotspots: [
       {
         position: new THREE.Vector3(-5, -3.8, -10),
@@ -27,7 +27,7 @@ let imagesData = [
   },
   {
     imageName: "pano_3.jpg",
-    cameraRotaion: null,
+    cameraRotation: null,
     hotspots: [
       {
         position: new THREE.Vector3(-5, -3.8, -10),
@@ -39,7 +39,7 @@ let imagesData = [
   },
   {
     imageName: "pano_4.jpg",
-    cameraRotaion: null,
+    cameraRotation: null,
     hotspots: [
       {
         position: new THREE.Vector3(-5, -3.8, -10),
@@ -51,7 +51,7 @@ let imagesData = [
   },
   {
     imageName: "pano_5.jpg",
-    cameraRotaion: null,
+    cameraRotation: null,
     hotspots: [
       {
         position: new THREE.Vector3(-5, -3.8, -10),
@@ -63,7 +63,7 @@ let imagesData = [
   },
   {
     imageName: "pano_6.jpg",
-    cameraRotaion: null,
+    cameraRotation: null,
     hotspots: [
       {
         position: new THREE.Vector3(-5, -3.8, -10),
@@ -75,7 +75,7 @@ let imagesData = [
   },
   {
     imageName: "pano_7.jpg",
-    cameraRotaion: null,
+    cameraRotation: null,
     hotspots: [
       {
         position: new THREE.Vector3(-5, -3.8, -10),
@@ -87,7 +87,7 @@ let imagesData = [
   },
   {
     imageName: "pano_8.jpg",
-    cameraRotaion: null,
+    cameraRotation: null,
     hotspots: [
       {
         position: new THREE.Vector3(-5, -3.8, -10),
